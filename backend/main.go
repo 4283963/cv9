@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -28,10 +29,13 @@ type AGV struct {
 }
 
 type Cargo struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Occupied bool   `json:"occupied"`
-	Color    string `json:"color"`
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Occupied    bool      `json:"occupied"`
+	Color       string    `json:"color"`
+	StockInTime time.Time `json:"stockInTime"`
+	WeightKG    float64   `json:"weightKg"`
+	Category    string    `json:"category"`
 }
 
 type ShelfSlot struct {
@@ -127,6 +131,7 @@ func initShelves() {
 	}
 
 	cargoColors := []string{"#e74c3c", "#3498db", "#2ecc71", "#f39c12", "#9b59b6", "#1abc9c", "#e67e22", "#34495e"}
+	cargoCategories := []string{"电子产品", "服装鞋帽", "食品饮料", "日用百货", "工业零件", "图书文具", "医疗用品", "家居建材"}
 
 	for idx, cfg := range shelfConfig {
 		shelfID := fmtShelfID(idx)
@@ -154,11 +159,18 @@ func initShelves() {
 					}
 					if rand.Float64() > 0.55 {
 						color := cargoColors[rand.Intn(len(cargoColors))]
+						daysAgo := rand.Intn(90)
+						hours := rand.Intn(24)
+						minutes := rand.Intn(60)
+						stockIn := time.Now().AddDate(0, 0, -daysAgo).Truncate(24 * time.Hour).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute)
 						slot.Cargo = &Cargo{
-							ID:       fmt.Sprintf("%s-slot-%d-%d-%d", shelfID, r, l, c),
-							Name:     fmt.Sprintf("货物-%d", rand.Intn(10000)),
-							Occupied: true,
-							Color:    color,
+							ID:          fmt.Sprintf("%s-slot-%d-%d-%d", shelfID, r, l, c),
+							Name:        fmt.Sprintf("货物-%d", rand.Intn(10000)),
+							Occupied:    true,
+							Color:       color,
+							StockInTime: stockIn,
+							WeightKG:    5 + rand.Float64()*95,
+							Category:    cargoCategories[rand.Intn(len(cargoCategories))],
 						}
 					}
 					shelf.Slots = append(shelf.Slots, slot)
@@ -325,6 +337,67 @@ func setAGVTargetHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "目标已设置", "data": agv})
 }
 
+func getSlotDetailHandler(c *gin.Context) {
+	shelfID := c.Param("shelfId")
+	row, err1 := strconv.Atoi(c.Param("row"))
+	level, err2 := strconv.Atoi(c.Param("level"))
+	column, err3 := strconv.Atoi(c.Param("column"))
+	if err1 != nil || err2 != nil || err3 != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "参数错误"})
+		return
+	}
+
+	mu.RLock()
+	defer mu.RUnlock()
+
+	var shelf *Shelf
+	for _, s := range shelves {
+		if s.ID == shelfID {
+			shelf = s
+			break
+		}
+	}
+	if shelf == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "货架不存在"})
+		return
+	}
+
+	var slot *ShelfSlot
+	for i := range shelf.Slots {
+		s := &shelf.Slots[i]
+		if s.Row == row && s.Level == level && s.Column == column {
+			slot = s
+			break
+		}
+	}
+	if slot == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "货位不存在"})
+		return
+	}
+
+	slotID := fmt.Sprintf("%s-R%d-L%d-C%d", shelfID, row, level, column)
+
+	var daysStored int
+	if slot.Cargo != nil {
+		daysStored = int(time.Since(slot.Cargo.StockInTime).Hours() / 24)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"slotId":     slotID,
+			"shelfId":    shelfID,
+			"row":        row,
+			"level":      level,
+			"column":     column,
+			"occupied":   slot.Cargo != nil,
+			"shelfPos":   shelf.Position,
+			"cargo":      slot.Cargo,
+			"daysStored": daysStored,
+		},
+	})
+}
+
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -352,6 +425,7 @@ func main() {
 		api.GET("/warehouse", getWarehouseHandler)
 		api.GET("/agvs", getAGVsHandler)
 		api.GET("/shelves", getShelvesHandler)
+		api.GET("/shelves/:shelfId/slots/:row/:level/:column", getSlotDetailHandler)
 		api.POST("/agvs/:id/target", setAGVTargetHandler)
 	}
 

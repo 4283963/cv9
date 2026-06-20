@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import WarehouseScene from './WarehouseScene.jsx'
 
 const API_BASE = '/api'
@@ -11,6 +11,12 @@ export default function App() {
   const [connected, setConnected] = useState(false)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [tick, setTick] = useState(0)
+
+  const [selectedSlot, setSelectedSlot] = useState(null)
+  const [slotDetail, setSlotDetail] = useState(null)
+  const [slotLoading, setSlotLoading] = useState(false)
+  const [bubblePos, setBubblePos] = useState({ x: 0, y: 0, visible: false })
+  const appRef = useRef(null)
 
   useEffect(() => {
     const fetchInitial = async () => {
@@ -54,9 +60,61 @@ export default function App() {
     return () => clearInterval(interval)
   }, [warehouse])
 
+  const handleSlotClick = useCallback(async (slotInfo, screenPos) => {
+    if (!slotInfo) {
+      setSelectedSlot(null)
+      setSlotDetail(null)
+      setBubblePos({ x: 0, y: 0, visible: false })
+      return
+    }
+
+    setSelectedSlot(slotInfo)
+    setSlotLoading(true)
+    setSlotDetail(null)
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/shelves/${slotInfo.shelfId}/slots/${slotInfo.row}/${slotInfo.level}/${slotInfo.column}`,
+        { cache: 'no-store' }
+      )
+      const json = await res.json()
+      if (json.success) {
+        setSlotDetail(json.data)
+      }
+    } catch (e) {
+      console.error('加载货位详情失败', e)
+    } finally {
+      setSlotLoading(false)
+    }
+
+    const appRect = appRef.current?.getBoundingClientRect()
+    if (appRect) {
+      setBubblePos({
+        x: screenPos.x - appRect.left,
+        y: screenPos.y - appRect.top,
+        visible: true,
+      })
+    }
+  }, [])
+
+  const closeBubble = () => {
+    setSelectedSlot(null)
+    setSlotDetail(null)
+    setBubblePos({ x: 0, y: 0, visible: false })
+  }
+
   const formatTime = (d) => {
     if (!d) return '--'
     return d.toLocaleTimeString('zh-CN', { hour12: false })
+  }
+
+  const formatStockIn = (iso) => {
+    if (!iso) return '--'
+    const d = new Date(iso)
+    return d.toLocaleString('zh-CN', {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    })
   }
 
   const getBatteryClass = (b) => (b > 60 ? 'high' : b > 30 ? 'med' : 'low')
@@ -64,9 +122,25 @@ export default function App() {
   const getStatusText = (s) =>
     s === 'working' ? '作业中' : s === 'charging' ? '充电中' : s === 'idle' ? '空闲' : s
 
+  const getDaysStoredBadge = (days) => {
+    if (days >= 60) return { text: `存放 ${days} 天`, color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }
+    if (days >= 30) return { text: `存放 ${days} 天`, color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' }
+    return { text: `存放 ${days} 天`, color: '#10b981', bg: 'rgba(16,185,129,0.12)' }
+  }
+
   return (
-    <div className="app-container">
-      <WarehouseScene warehouse={warehouse} shelves={shelves} agvs={agvs} />
+    <div className="app-container" ref={appRef} onClick={(e) => {
+      if (e.target === appRef.current || e.target.classList.contains('canvas-container')) {
+        closeBubble()
+      }
+    }}>
+      <WarehouseScene
+        warehouse={warehouse}
+        shelves={shelves}
+        agvs={agvs}
+        selectedSlot={selectedSlot}
+        onSlotClick={handleSlotClick}
+      />
 
       <div className="info-panel">
         <div className="panel-title">立体仓库监控中心</div>
@@ -191,10 +265,99 @@ export default function App() {
           <b>滚轮</b>：缩放场景　
           <b>右键拖拽</b>：平移画面
         </div>
-        <div style={{ marginTop: 4, color: '#64748b' }}>
-          数据每秒轮询更新，后端每 100ms 模拟小车移动
+        <div style={{ marginTop: 4 }}>
+          <b style={{ color: '#60a5fa' }}>点击货位</b>：查看货物详情
         </div>
       </div>
+
+      {bubblePos.visible && (
+        <div
+          className="slot-bubble"
+          style={{
+            left: bubblePos.x,
+            top: bubblePos.y,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bubble-close" onClick={closeBubble} title="关闭">×</div>
+          {slotLoading && (
+            <div className="bubble-loading">
+              <div className="spinner" />
+              <span>加载货位详情...</span>
+            </div>
+          )}
+          {!slotLoading && slotDetail && (
+            <>
+              <div className="bubble-header">
+                <div className="bubble-icon">📦</div>
+                <div>
+                  <div className="bubble-title">{slotDetail.slotId}</div>
+                  <div className="bubble-subtitle">
+                    {slotDetail.shelfId} · 第{slotDetail.row + 1}排 · 第{slotDetail.level + 1}层 · 第{slotDetail.column + 1}列
+                  </div>
+                </div>
+              </div>
+
+              {slotDetail.occupied ? (
+                <>
+                  <div className="bubble-divider" />
+                  <div className="bubble-row">
+                    <span className="bubble-label">货物名称</span>
+                    <span className="bubble-value strong" style={{
+                      color: slotDetail.cargo?.color || '#fff',
+                    }}>
+                      {slotDetail.cargo?.name}
+                    </span>
+                  </div>
+                  <div className="bubble-row">
+                    <span className="bubble-label">货物类别</span>
+                    <span className="bubble-value">
+                      <span className="category-tag">{slotDetail.cargo?.category || '--'}</span>
+                    </span>
+                  </div>
+                  <div className="bubble-row">
+                    <span className="bubble-label">入库时间</span>
+                    <span className="bubble-value">{formatStockIn(slotDetail.cargo?.stockInTime)}</span>
+                  </div>
+                  <div className="bubble-row">
+                    <span className="bubble-label">货物重量</span>
+                    <span className="bubble-value">{slotDetail.cargo?.weightKg?.toFixed(1) || '--'} kg</span>
+                  </div>
+                  <div className="bubble-row">
+                    <span className="bubble-label">存放时长</span>
+                    <span className="bubble-value">
+                      <span
+                        className="days-badge"
+                        style={{
+                          color: getDaysStoredBadge(slotDetail.daysStored).color,
+                          background: getDaysStoredBadge(slotDetail.daysStored).bg,
+                        }}
+                      >
+                        {getDaysStoredBadge(slotDetail.daysStored).text}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="bubble-row">
+                    <span className="bubble-label">占用状态</span>
+                    <span className="bubble-value status-badge occupied">● 已占用</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bubble-divider" />
+                  <div className="bubble-empty">
+                    <div className="empty-icon">📭</div>
+                    <div className="empty-text">此货位当前为空</div>
+                    <div className="empty-sub">可用于存放新货物</div>
+                  </div>
+                </>
+              )}
+
+              <div className="bubble-pointer" />
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

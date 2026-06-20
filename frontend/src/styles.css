@@ -256,3 +256,216 @@ html, body, #root {
 .battery-fill.high { background: #34d399; }
 .battery-fill.med { background: #fbbf24; }
 .battery-fill.low { background: #ef4444; }
+
+.slot-bubble {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 24px));
+  min-width: 300px;
+  max-width: 360px;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.97), rgba(30, 41, 59, 0.97));
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 14px;
+  padding: 18px;
+  color: #e2e8f0;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(59, 130, 246, 0.1),
+    0 0 40px rgba(59, 130, 246, 0.1);
+  z-index: 200;
+  animation: bubbleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: auto;
+  font-size: 13px;
+}
+
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 12px)) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, calc(-100% - 24px)) scale(1); }
+}
+
+.bubble-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.bubble-close:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.bubble-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 0;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(59, 130, 246, 0.25);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.bubble-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-right: 24px;
+}
+
+.bubble-icon {
+  width: 42px;
+  height: 42px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 211, 238, 0.15));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.bubble-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #60a5fa;
+  margin-bottom: 3px;
+  letter-spacing: 0.3px;
+}
+
+.bubble-subtitle {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.bubble-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.25), transparent);
+  margin: 14px 0 12px;
+}
+
+.bubble-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  gap: 12px;
+}
+
+.bubble-label {
+  font-size: 12px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.bubble-value {
+  font-size: 13px;
+  color: #e2e8f0;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.bubble-value.strong {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.category-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.days-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.status-badge.occupied {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+}
+
+.status-badge.empty {
+  background: rgba(100, 116, 139, 0.12);
+  color: #94a3b8;
+}
+
+.bubble-empty {
+  text-align: center;
+  padding: 14px 8px 6px;
+}
+
+.empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+  opacity: 0.7;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: #94a3b8;
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.empty-sub {
+  font-size: 11px;
+  color: #475569;
+}
+
+.bubble-pointer {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 14px;
+  height: 14px;
+  background: rgba(15, 23, 42, 0.97);
+  border-right: 1px solid rgba(59, 130, 246, 0.4);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 0 0 4px 0;
+}

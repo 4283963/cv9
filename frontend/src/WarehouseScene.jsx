@@ -12,7 +12,7 @@ const SLOT_HEIGHT = 1.0
 const LERP_SPEED = 6.0
 const ROT_LERP_SPEED = 4.0
 
-export default function WarehouseScene({ warehouse, shelves, agvs }) {
+export default function WarehouseScene({ warehouse, shelves, agvs, selectedSlot, onSlotClick }) {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
   const rendererRef = useRef(null)
@@ -22,9 +22,17 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
   const agvStateRef = useRef(new Map())
   const frameIdRef = useRef(null)
   const lastTimeRef = useRef(performance.now())
-  const agvsRef = useRef(agvs)
+  const raycasterRef = useRef(new THREE.Raycaster())
+  const mouseRef = useRef(new THREE.Vector2())
+  const hoveredRef = useRef(null)
+  const selectedRef = useRef(null)
+  const clickStateRef = useRef({ down: false, downX: 0, downY: 0, downPos: null })
+  const onSlotClickRef = useRef(onSlotClick)
+  const canvasRef = useRef(null)
+  const selectedSlotRef = useRef(selectedSlot)
 
-  agvsRef.current = agvs
+  onSlotClickRef.current = onSlotClick
+  selectedSlotRef.current = selectedSlot
 
   useEffect(() => {
     const mount = mountRef.current
@@ -52,6 +60,7 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
+    canvasRef.current = renderer.domElement
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -87,6 +96,118 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
     createFloor(scene, w, l)
     createWarehouseWalls(scene, w, l, warehouse?.height || 8)
     createGridLines(scene, w, l)
+
+    const setupInteraction = () => {
+      const canvas = renderer.domElement
+
+      const getIntersectedSlot = (event) => {
+        const rect = canvas.getBoundingClientRect()
+        const x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+        const y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+        mouseRef.current.set(x, y)
+        raycasterRef.current.setFromCamera(mouseRef.current, camera)
+
+        const shelfGroup = scene.getObjectByName('shelvesGroup')
+        if (!shelfGroup) return null
+
+        const targets = []
+        shelfGroup.traverse((obj) => {
+          if (obj.userData?.isSlot) targets.push(obj)
+        })
+
+        const intersects = raycasterRef.current.intersectObjects(targets, false)
+        if (intersects.length > 0) {
+          return {
+            obj: intersects[0].object,
+            point: intersects[0].point,
+            clientX: event.clientX,
+            clientY: event.clientY,
+          }
+        }
+        return null
+      }
+
+      const clearHover = () => {
+        if (hoveredRef.current) {
+          const obj = hoveredRef.current
+          if (obj.userData.hoverOutline) {
+            obj.userData.hoverOutline.visible = false
+          }
+          if (obj.userData.originalScale) {
+            obj.scale.copy(obj.userData.originalScale)
+          }
+          if (obj.userData.originalEmissive !== undefined && obj.material) {
+            obj.material.emissive.setHex(obj.userData.originalEmissive)
+            obj.material.emissiveIntensity = obj.userData.originalEmissiveIntensity ?? 0
+          }
+          hoveredRef.current = null
+        }
+      }
+
+      const applyHover = (obj) => {
+        if (hoveredRef.current === obj) return
+        clearHover()
+        hoveredRef.current = obj
+
+        if (!obj.userData.hoverOutline) {
+          const outlineGeo = new THREE.BoxGeometry(1, 1, 1)
+          outlineGeo.scale(obj.scale.x * 1.05, obj.scale.y * 1.05, obj.scale.z * 1.05)
+          const edges = new THREE.EdgesGeometry(outlineGeo)
+          const outline = new THREE.LineSegments(
+            edges,
+            new THREE.LineBasicMaterial({ color: 0x60a5fa, linewidth: 2 })
+          )
+          outline.position.copy(obj.position)
+          obj.parent?.add(outline)
+          obj.userData.hoverOutline = outline
+        }
+        obj.userData.hoverOutline.visible = true
+        canvas.style.cursor = 'pointer'
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return
+        clickStateRef.current.down = true
+        clickStateRef.current.downX = e.clientX
+        clickStateRef.current.downY = e.clientY
+        clickStateRef.current.downPos = controls.target.clone()
+      })
+
+      canvas.addEventListener('pointermove', (e) => {
+        const hit = getIntersectedSlot(e)
+        if (hit) {
+          applyHover(hit.obj)
+        } else {
+          clearHover()
+          canvas.style.cursor = 'grab'
+        }
+      })
+
+      canvas.addEventListener('pointerup', (e) => {
+        if (e.button !== 0) return
+        if (!clickStateRef.current.down) return
+        const dx = e.clientX - clickStateRef.current.downX
+        const dy = e.clientY - clickStateRef.current.downY
+        clickStateRef.current.down = false
+
+        if (Math.abs(dx) < 5 && Math.abs(dy) < 5) {
+          const hit = getIntersectedSlot(e)
+          if (hit && hit.obj.userData?.slotInfo) {
+            onSlotClickRef.current?.(hit.obj.userData.slotInfo, {
+              x: e.clientX,
+              y: e.clientY,
+            })
+            selectedRef.current = hit.obj
+          }
+        }
+      })
+
+      canvas.addEventListener('pointerleave', () => {
+        clearHover()
+        canvas.style.cursor = 'default'
+      })
+    }
+    setupInteraction()
 
     const animate = () => {
       frameIdRef.current = requestAnimationFrame(animate)
@@ -265,6 +386,40 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
     })
   }, [agvs])
 
+  useEffect(() => {
+    const scene = sceneRef.current
+    if (!scene) return
+    const shelfGroup = scene.getObjectByName('shelvesGroup')
+    if (!shelfGroup) return
+
+    shelfGroup.traverse((obj) => {
+      if (obj.userData?.selectedOutline) {
+        obj.userData.selectedOutline.visible = false
+      }
+    })
+
+    if (!selectedSlot) return
+    const { shelfId, row, level, column } = selectedSlot
+
+    shelfGroup.traverse((obj) => {
+      const info = obj.userData?.slotInfo
+      if (!info) return
+      if (info.shelfId === shelfId && info.row === row && info.level === level && info.column === column) {
+        if (!obj.userData.selectedOutline) {
+          const selGeo = new THREE.BoxGeometry(1, 1, 1)
+          selGeo.scale(obj.scale.x * 1.08, obj.scale.y * 1.08, obj.scale.z * 1.08)
+          const edges = new THREE.EdgesGeometry(selGeo)
+          const mat = new THREE.LineBasicMaterial({ color: 0x22d3ee, linewidth: 3 })
+          const outline = new THREE.LineSegments(edges, mat)
+          outline.position.copy(obj.position)
+          obj.parent?.add(outline)
+          obj.userData.selectedOutline = outline
+        }
+        obj.userData.selectedOutline.visible = true
+      }
+    })
+  }, [selectedSlot, shelves])
+
   return <div ref={mountRef} className="canvas-container" />
 }
 
@@ -401,29 +556,66 @@ function createShelf(group, shelf) {
   const startZ = -totalDepth / 2 + 0.05 + SLOT_DEPTH / 2
 
   shelf.slots.forEach((slot) => {
-    if (!slot.cargo) return
     const x = startX + slot.column * (SLOT_WIDTH + 0.05)
     const z = startZ + slot.row * (SLOT_DEPTH + 0.05)
     const y = slot.level * LEVEL_HEIGHT + SLOT_HEIGHT / 2 + 0.05
 
-    const cargoGeo = new THREE.BoxGeometry(SLOT_WIDTH * 0.85, SLOT_HEIGHT * 0.85, SLOT_DEPTH * 0.85)
-    const cargoColor = new THREE.Color(slot.cargo.color || '#3498db')
-    const cargoMat = new THREE.MeshStandardMaterial({
-      color: cargoColor,
-      roughness: 0.6,
-      metalness: 0.1,
-    })
-    const cargo = new THREE.Mesh(cargoGeo, cargoMat)
-    cargo.position.set(x, y, z)
-    cargo.castShadow = true
-    cargo.receiveShadow = true
-    shelfGroup.add(cargo)
+    const slotInfo = {
+      shelfId: shelf.ID,
+      row: slot.row,
+      level: slot.level,
+      column: slot.column,
+      occupied: !!slot.cargo,
+      position: { x, y, z },
+    }
 
-    const edgeGeo = new THREE.EdgesGeometry(cargoGeo)
-    const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 })
-    const edges = new THREE.LineSegments(edgeGeo, edgeMat)
-    edges.position.copy(cargo.position)
-    shelfGroup.add(edges)
+    if (slot.cargo) {
+      const cargoGeo = new THREE.BoxGeometry(SLOT_WIDTH * 0.85, SLOT_HEIGHT * 0.85, SLOT_DEPTH * 0.85)
+      const cargoColor = new THREE.Color(slot.cargo.color || '#3498db')
+      const cargoMat = new THREE.MeshStandardMaterial({
+        color: cargoColor,
+        roughness: 0.6,
+        metalness: 0.1,
+      })
+      const cargo = new THREE.Mesh(cargoGeo, cargoMat)
+      cargo.position.set(x, y, z)
+      cargo.castShadow = true
+      cargo.receiveShadow = true
+      cargo.userData.isSlot = true
+      cargo.userData.slotInfo = slotInfo
+      cargo.userData.originalEmissive = 0x000000
+      cargo.userData.originalEmissiveIntensity = 0
+      shelfGroup.add(cargo)
+
+      const edgeGeo = new THREE.EdgesGeometry(cargoGeo)
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 })
+      const edges = new THREE.LineSegments(edgeGeo, edgeMat)
+      edges.position.copy(cargo.position)
+      shelfGroup.add(edges)
+    } else {
+      const slotGeo = new THREE.BoxGeometry(SLOT_WIDTH * 0.82, SLOT_HEIGHT * 0.75, SLOT_DEPTH * 0.82)
+      const slotMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.9,
+        metalness: 0,
+        transparent: true,
+        opacity: 0.55,
+      })
+      const slotMesh = new THREE.Mesh(slotGeo, slotMat)
+      slotMesh.position.set(x, y, z)
+      slotMesh.receiveShadow = true
+      slotMesh.userData.isSlot = true
+      slotMesh.userData.slotInfo = slotInfo
+      slotMesh.userData.originalEmissive = 0x000000
+      slotMesh.userData.originalEmissiveIntensity = 0
+      shelfGroup.add(slotMesh)
+
+      const frameGeo = new THREE.EdgesGeometry(slotGeo)
+      const frameMat = new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.5 })
+      const frame = new THREE.LineSegments(frameGeo, frameMat)
+      frame.position.copy(slotMesh.position)
+      shelfGroup.add(frame)
+    }
   })
 
   group.add(shelfGroup)
