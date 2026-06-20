@@ -9,6 +9,9 @@ const SLOT_WIDTH = 0.45
 const SLOT_DEPTH = 0.45
 const SLOT_HEIGHT = 1.0
 
+const LERP_SPEED = 6.0
+const ROT_LERP_SPEED = 4.0
+
 export default function WarehouseScene({ warehouse, shelves, agvs }) {
   const mountRef = useRef(null)
   const sceneRef = useRef(null)
@@ -16,7 +19,12 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
   const cameraRef = useRef(null)
   const controlsRef = useRef(null)
   const agvMeshesRef = useRef(new Map())
+  const agvStateRef = useRef(new Map())
   const frameIdRef = useRef(null)
+  const lastTimeRef = useRef(performance.now())
+  const agvsRef = useRef(agvs)
+
+  agvsRef.current = agvs
 
   useEffect(() => {
     const mount = mountRef.current
@@ -82,9 +90,17 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
 
     const animate = () => {
       frameIdRef.current = requestAnimationFrame(animate)
+
+      const now = performance.now()
+      const dt = Math.min((now - lastTimeRef.current) / 1000, 0.1)
+      lastTimeRef.current = now
+
+      updateAGVAnimations(dt)
+
       controls.update()
       renderer.render(scene, camera)
     }
+    lastTimeRef.current = performance.now()
     animate()
 
     const onResize = () => {
@@ -114,6 +130,50 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
       })
     }
   }, [warehouse])
+
+  const updateAGVAnimations = (dt) => {
+    const camera = cameraRef.current
+    if (!camera) return
+
+    agvStateRef.current.forEach((state, id) => {
+      const mesh = agvMeshesRef.current.get(id)
+      if (!mesh) return
+
+      const lerpFactor = 1 - Math.exp(-LERP_SPEED * dt)
+      mesh.position.x += (state.targetPos.x - mesh.position.x) * lerpFactor
+      mesh.position.z += (state.targetPos.z - mesh.position.z) * lerpFactor
+      mesh.position.y = state.targetPos.y
+
+      const dx = state.targetPos.x - state.prevPos.x
+      const dz = state.targetPos.z - state.prevPos.z
+      const moving = Math.sqrt(dx * dx + dz * dz) > 0.02
+      if (moving) {
+        const targetRot = Math.atan2(dx, dz)
+        state.targetRot = targetRot
+      }
+
+      const rotLerp = 1 - Math.exp(-ROT_LERP_SPEED * dt)
+      let currentRot = mesh.rotation.y
+      let targetRot = state.targetRot ?? currentRot
+      let diff = targetRot - currentRot
+      while (diff > Math.PI) diff -= Math.PI * 2
+      while (diff < -Math.PI) diff += Math.PI * 2
+      mesh.rotation.y += diff * rotLerp
+
+      const wheels = mesh.getObjectByName('wheels')
+      if (wheels && moving) {
+        const wheelSpeed = 8.0
+        wheels.children.forEach((w) => {
+          w.rotation.x += wheelSpeed * dt
+        })
+      }
+
+      const label = mesh.getObjectByName('label')
+      if (label) {
+        label.lookAt(camera.position)
+      }
+    })
+  }
 
   useEffect(() => {
     const scene = sceneRef.current
@@ -158,6 +218,7 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
           }
         })
         agvMeshesRef.current.delete(id)
+        agvStateRef.current.delete(id)
       }
     })
 
@@ -165,15 +226,26 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
       let agvMesh = agvMeshesRef.current.get(agv.id)
       if (!agvMesh) {
         agvMesh = createAGV(agv)
+        agvMesh.position.set(agv.position.x, agv.position.y, agv.position.z)
         scene.add(agvMesh)
         agvMeshesRef.current.set(agv.id, agvMesh)
+
+        const initTargetRot = agv.target
+          ? Math.atan2(agv.target.x - agv.position.x, agv.target.z - agv.position.z)
+          : 0
+
+        agvStateRef.current.set(agv.id, {
+          targetPos: { x: agv.position.x, y: agv.position.y, z: agv.position.z },
+          prevPos: { x: agv.position.x, y: agv.position.y, z: agv.position.z },
+          targetRot: initTargetRot,
+        })
       }
 
-      agvMesh.position.set(
-        agv.position.x,
-        agv.position.y,
-        agv.position.z
-      )
+      const state = agvStateRef.current.get(agv.id)
+      if (state) {
+        state.prevPos = { ...state.targetPos }
+        state.targetPos = { x: agv.position.x, y: agv.position.y, z: agv.position.z }
+      }
 
       const body = agvMesh.getObjectByName('body')
       if (body) {
@@ -185,9 +257,10 @@ export default function WarehouseScene({ warehouse, shelves, agvs }) {
         body.material.emissiveIntensity = agv.status === 'working' ? 0.35 : 0.15
       }
 
-      const label = agvMesh.getObjectByName('label')
-      if (label) {
-        label.lookAt(cameraRef.current.position)
+      const light = agvMesh.getObjectByName('statusLight')
+      if (light) {
+        const lightColor = agv.status === 'working' ? 0x22c55e : 0xef4444
+        light.material.color.setHex(lightColor)
       }
     })
   }, [agvs])
@@ -377,6 +450,14 @@ function createAGV(agv) {
   body.receiveShadow = true
   group.add(body)
 
+  const front = new THREE.Mesh(
+    new THREE.BoxGeometry(0.2, 0.2, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x60a5fa, emissiveIntensity: 0.8 })
+  )
+  front.position.set(0, 0.35, 0.36)
+  front.name = 'front'
+  group.add(front)
+
   const topGeo = new THREE.BoxGeometry(0.7, 0.25, 0.5)
   const topMat = new THREE.MeshStandardMaterial({
     color: 0x1e293b,
@@ -388,6 +469,8 @@ function createAGV(agv) {
   top.castShadow = true
   group.add(top)
 
+  const wheelsGroup = new THREE.Group()
+  wheelsGroup.name = 'wheels'
   const wheelGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.1, 16)
   wheelGeo.rotateZ(Math.PI / 2)
   const wheelMat = new THREE.MeshStandardMaterial({
@@ -404,8 +487,9 @@ function createAGV(agv) {
     const wheel = new THREE.Mesh(wheelGeo, wheelMat)
     wheel.position.set(x, y, z)
     wheel.castShadow = true
-    group.add(wheel)
+    wheelsGroup.add(wheel)
   })
+  group.add(wheelsGroup)
 
   const lightGeo = new THREE.SphereGeometry(0.05, 12, 12)
   const lightColor = agv.status === 'working' ? 0x22c55e : 0xef4444

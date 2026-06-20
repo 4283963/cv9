@@ -80,20 +80,20 @@ func initWarehouse() {
 		Position: Position{X: 2, Y: 0.3, Z: 2},
 		Status:   "idle",
 		Battery:  85.5,
-		Target:   &Position{X: 12, Y: 0.3, Z: 10},
+		Target:   &Position{X: 10, Y: 0.3, Z: 9},
 		Speed:    1.2,
 	}
 	agvs["agv-2"] = &AGV{
 		ID: "agv-2", Name: "AGV-002",
-		Position: Position{X: 12, Y: 0.3, Z: 18},
+		Position: Position{X: 10, Y: 0.3, Z: 15},
 		Status:   "working",
 		Battery:  72.3,
-		Target:   &Position{X: 25, Y: 0.3, Z: 5},
+		Target:   &Position{X: 28, Y: 0.3, Z: 9},
 		Speed:    1.0,
 	}
 	agvs["agv-3"] = &AGV{
 		ID: "agv-3", Name: "AGV-003",
-		Position: Position{X: 25, Y: 0.3, Z: 22},
+		Position: Position{X: 28, Y: 0.3, Z: 22},
 		Status:   "charging",
 		Battery:  45.0,
 		Target:   nil,
@@ -101,10 +101,10 @@ func initWarehouse() {
 	}
 	agvs["agv-4"] = &AGV{
 		ID: "agv-4", Name: "AGV-004",
-		Position: Position{X: 6, Y: 0.3, Z: 14},
+		Position: Position{X: 9, Y: 0.3, Z: 15},
 		Status:   "working",
 		Battery:  91.2,
-		Target:   &Position{X: 20, Y: 0.3, Z: 20},
+		Target:   &Position{X: 20, Y: 0.3, Z: 22},
 		Speed:    1.5,
 	}
 
@@ -217,10 +217,22 @@ func moveAGVs() {
 }
 
 func randomTarget() Position {
+	xCandidates := []float64{
+		1.5 + rand.Float64()*1.5,
+		7.5 + rand.Float64()*5.0,
+		17.5 + rand.Float64()*5.0,
+		27.0 + rand.Float64()*1.5,
+	}
+	zCandidates := []float64{
+		1.5 + rand.Float64()*1.5,
+		8.0 + rand.Float64()*2.0,
+		14.0 + rand.Float64()*2.0,
+		20.0 + rand.Float64()*3.5,
+	}
 	return Position{
-		X: 1 + rand.Float64()*(warehouse.Width-2),
+		X: xCandidates[rand.Intn(len(xCandidates))],
 		Y: 0.3,
-		Z: 1 + rand.Float64()*(warehouse.Length-2),
+		Z: zCandidates[rand.Intn(len(zCandidates))],
 	}
 }
 
