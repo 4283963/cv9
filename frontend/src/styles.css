@@ -1,0 +1,258 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+}
+
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  background: #0a0f1a;
+}
+
+.canvas-container {
+  width: 100%;
+  height: 100%;
+}
+
+.info-panel {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  color: #e2e8f0;
+  min-width: 280px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #60a5fa;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-title::before {
+  content: '';
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #3b82f6, #60a5fa);
+  border-radius: 2px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.summary-item {
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.summary-label {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.summary-value.accent {
+  color: #60a5fa;
+}
+
+.summary-value.success {
+  color: #34d399;
+}
+
+.summary-value.warn {
+  color: #fbbf24;
+}
+
+.agv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agv-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 3px solid;
+}
+
+.agv-item.idle {
+  border-left-color: #64748b;
+}
+
+.agv-item.working {
+  border-left-color: #3b82f6;
+}
+
+.agv-item.charging {
+  border-left-color: #fbbf24;
+}
+
+.agv-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.agv-info {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.agv-status {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+
+.agv-status.idle {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+}
+
+.agv-status.working {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.agv-status.charging {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+}
+
+.control-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  color: #e2e8f0;
+  min-width: 220px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.control-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #60a5fa;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.control-label {
+  color: #94a3b8;
+}
+
+.control-value {
+  color: #f1f5f9;
+  font-weight: 500;
+}
+
+.hint-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 14px 18px;
+  color: #94a3b8;
+  font-size: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  max-width: 360px;
+  line-height: 1.7;
+}
+
+.hint-title {
+  color: #60a5fa;
+  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.battery-bar {
+  width: 50px;
+  height: 6px;
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.battery-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.battery-fill.high { background: #34d399; }
+.battery-fill.med { background: #fbbf24; }
+.battery-fill.low { background: #ef4444; }
